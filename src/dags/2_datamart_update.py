@@ -35,7 +35,17 @@ def get_execution_date(**context) -> str:
     return str(execution_date).split('T')[0]
 
 
-def update_dwh(schema: str, table_name: str, vertica_connection: object):
+def update_dwh(schema: str,
+               table_name: str,
+               vertica_connection: object):
+    """
+    Функция заполняет отчетную витрину
+
+    :param schema: название схемы
+    :param table_name: имя таблицы
+    :param vertica_connection: параметры подключения к Vertica
+    """
+
     chosen_day = get_execution_date()
     log.info(msg=f'Начало загрузки данных в Vertica: {datetime.now().strftime("%Y-%m-%d %H:%M:%s")}')
     with vertica_connection:

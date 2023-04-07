@@ -37,13 +37,17 @@ connect_to_db = psycopg2.connect(f"host='{psql_connection.host}' port='{psql_con
                                  f"password='{psql_connection.password}'")
 
 
+def check_last_date(
+        table_name: str,
+        column_name: str) -> str:
+    """
+    Функция проверки наибольшей даты и времени записей, уже загруженных в стейдж для
+    уменьшения объема загружаемых данных
 
-
-
-def check_last_date(table_name: str, column_name: str) -> str:
-    """Функция принимает в себя назнание таблицы и название колонки, содержащей данные о времени записи и
-        возвращает наибольшую дату и время записей уже загруженных в стейдж
-        для уменьшения объема загружаемых данных"""
+    :param table_name: имя таблицы
+    :param column_name: название кононки
+    :return: возвращает наибольшее время у записей, загруженных в стейдж
+    """
     vertica_connection = VerticaHook().get_conn()
     with vertica_connection as conn:
         cur = conn.cursor()
@@ -55,10 +59,17 @@ def check_last_date(table_name: str, column_name: str) -> str:
         return max_datetime
 
 
-def data_receiver(connect_pg: object, schema: str, table_name: str):
-    """Функция принимает в себя параменты подключения к Postgres, наименование схемы и таблицы.
-    Получает данные из Postgres, создает и возвращает dataframe
+def data_receiver(connect_pg: object,
+                  schema: str,
+                  table_name: str):
+    """Функция получает данные из S3 и сохраняет их в dataframe
+
+    :param connect_pg: параметры подключения
+    :param schema: название схемы
+    :param table_name: имя таблицы
+    :return: возвращает dataframe с данных из S3
     """
+
     if table_name == 'transactions':
         column_name = 'transaction_dt'
     elif table_name == 'currencies':
@@ -67,22 +78,28 @@ def data_receiver(connect_pg: object, schema: str, table_name: str):
         log.error(msg='Указана неизвестная таблица')
         raise Exception('Указана неизвестная таблица')
     max_date = check_last_date(table_name=table_name, column_name=column_name)
-    sql = f"""
-            select * from {schema}.{table_name} where {column_name} > '{max_date}';
-            """
+    sql = f"""select * from {schema}.{table_name} where {column_name} > '{max_date}';"""
     df = pd.read_sql_query(sql, connect_pg)
     log.info(f"Подготовлен Dataframe c {df.shape[0]} записями")
     return df
 
 
-def load_to_vertica(schema: str, table_name: str, vertica_conn_info: object, columns: tuple) -> None:
+def load_to_vertica(schema: str,
+                    table_name: str,
+                    vertica_conn_info: object,
+                    columns: tuple) -> None:
     """
     Функция принимает в себя наименования схемы и таблицы, параменты подключения к Vertica и название колонок
     и выполняет копирование собранного в памяти dataframe в Vertica
+
+    :param schema: название схемы
+    :param table_name: имя таблицы
+    :param vertica_conn_info: параметры подключения к Vertica
+    :param columns: название колонок в таблице
+    :return: возвращает dataframe с данных из S3
     """
     df = data_receiver(connect_pg=connect_to_db, schema='public', table_name=table_name)
     vertica_connection = VerticaHook().get_conn()
-    # вставляем данные из DataFrame в Vertica
     log.info(msg=f'Начало загрузки данных в Vertica: {datetime.now().strftime("%Y-%m-%d %H:%M:%s")}')
     with vertica_connection:
         cur = vertica_conn_info.cursor()
